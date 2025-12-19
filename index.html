@@ -84,7 +84,7 @@
       margin: 10px 0;
     }
 
-    /* кликабельность в WebView + подсветка вариантов */
+    /* ВАЖНО ДЛЯ TELEGRAM WEBVIEW: кликабельность в followup */
     #followup, #followupOptions {
       position: relative;
       z-index: 9999;
@@ -94,11 +94,15 @@
       pointer-events: auto;
       position: relative;
       z-index: 10000;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
     }
     .optionBtn.active {
       border: 2px solid #2f80ed;
       font-weight: 700;
     }
+
+    /* подсветка Да/Нет */
     #trainYes.active,
     #trainNo.active {
       border: 2px solid #2f80ed;
@@ -196,11 +200,12 @@
       setTimeout(() => { el.textContent = ""; }, 1800);
     }
 
+    // ===== Отрисовка =====
     function render() {
       const items = loadItems();
 
-      const last = items[0];
       const lastSavedEl = document.getElementById("lastSaved");
+      const last = items[0];
       lastSavedEl.textContent = last
         ? `Последняя запись: ${formatDate(last.ts)}`
         : "Пока нет сохранённых записей.";
@@ -216,7 +221,10 @@
         date.textContent = formatDate(it.ts);
 
         const text = document.createElement("div");
-        text.textContent = it.text;
+        let extra = "";
+        if (it.training === true) extra = ` (тренировка: да, стало: ${it.trainingEffect || "—"})`;
+        if (it.training === false) extra = ` (тренировка: нет, причина: ${it.trainingWhy || "—"})`;
+        text.textContent = it.text + extra;
 
         li.appendChild(date);
         li.appendChild(text);
@@ -240,13 +248,14 @@
         trainingWhy: null
       };
 
-      // сбрасываем подсветку Да/Нет на всякий случай
+      // сброс шаг 2
       document.getElementById("trainYes").classList.remove("active");
       document.getElementById("trainNo").classList.remove("active");
+      document.getElementById("followup").style.display = "none";
+      document.getElementById("followupTitle").textContent = "";
+      document.getElementById("followupOptions").innerHTML = "";
 
       document.getElementById("step2").style.display = "block";
-      document.getElementById("followup").style.display = "none";
-
       setStatus("Окей, ещё один вопрос 👇");
     }
 
@@ -258,7 +267,7 @@
       render();
     }
 
-    // ===== Шаг 2 =====
+    // ===== Followup =====
     function showFollowup(title, options, onPick) {
       const followup = document.getElementById("followup");
       const titleEl = document.getElementById("followupTitle");
@@ -273,13 +282,12 @@
         b.className = "optionBtn";
         b.textContent = label;
 
+        // onclick — стабильнее в Telegram WebView
         b.onclick = () => {
           optsEl.querySelectorAll(".optionBtn").forEach(x => x.classList.remove("active"));
           b.classList.add("active");
 
           onPick(label);
-
-          titleEl.textContent = title + " ✅ Выбрано: " + label;
           setStatus("Отлично, теперь жми «Сохранить запись» ✓");
         };
 
@@ -289,10 +297,13 @@
       followup.style.display = "block";
     }
 
+    // ===== Да =====
     document.getElementById("trainYes").addEventListener("click", () => {
       if (!pendingEntry) return;
 
       pendingEntry.training = true;
+      pendingEntry.trainingWhy = null;
+      pendingEntry.trainingEffect = null;
 
       document.getElementById("trainYes").classList.add("active");
       document.getElementById("trainNo").classList.remove("active");
@@ -304,10 +315,13 @@
       );
     });
 
+    // ===== Нет =====
     document.getElementById("trainNo").addEventListener("click", () => {
       if (!pendingEntry) return;
 
       pendingEntry.training = false;
+      pendingEntry.trainingEffect = null;
+      pendingEntry.trainingWhy = null;
 
       document.getElementById("trainNo").classList.add("active");
       document.getElementById("trainYes").classList.remove("active");
@@ -319,20 +333,27 @@
       );
     });
 
+    // ===== Назад =====
     document.getElementById("backBtn").addEventListener("click", () => {
       document.getElementById("step2").style.display = "none";
       document.getElementById("followup").style.display = "none";
+      setStatus("Ок, вернулся назад 🙂");
     });
 
+    // ===== Финальное сохранение =====
     document.getElementById("finishBtn").addEventListener("click", () => {
       if (!pendingEntry) return;
 
       if (pendingEntry.training === true && !pendingEntry.trainingEffect) {
-        setStatus("Выбери: лучше/так же/хуже 🙂");
+        setStatus("Выбери: лучше / так же / хуже 🙂");
         return;
       }
       if (pendingEntry.training === false && !pendingEntry.trainingWhy) {
         setStatus("Выбери причину 🙂");
+        return;
+      }
+      if (pendingEntry.training === null) {
+        setStatus("Сначала ответь: была ли тренировка 🙂");
         return;
       }
 
