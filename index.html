@@ -100,6 +100,11 @@
   border: 2px solid #2f80ed;
   font-weight: 700;
 }
+  #trainYes.active,
+#trainNo.active {
+  border: 2px solid #2f80ed;
+  font-weight: 700;
+}
   </style>
 </head>
 
@@ -121,7 +126,7 @@
   <h1>Была ли сегодня тренировка?</h1>
 
   <div class="row">
-    <button class="primary" id="trainYes">Да</button>
+    <button id="trainYes">Да</button>
     <button id="trainNo">Нет</button>
   </div>
 
@@ -279,7 +284,11 @@
 
 document.getElementById("trainYes").addEventListener("click", () => {
   if (!pendingEntry) return;
+
   pendingEntry.training = true;
+
+  document.getElementById("trainYes").classList.add("active");
+  document.getElementById("trainNo").classList.remove("active");
 
   showFollowup(
     "После тренировки тебе стало…",
@@ -290,12 +299,18 @@ document.getElementById("trainYes").addEventListener("click", () => {
 
 document.getElementById("trainNo").addEventListener("click", () => {
   if (!pendingEntry) return;
+
   pendingEntry.training = false;
+
+  document.getElementById("trainNo").classList.add("active");
+  document.getElementById("trainYes").classList.remove("active");
 
   showFollowup(
     "Почему не получилось?",
     ["Не было сил", "Не было времени", "Не было желания", "Болел/травма", "Другое"],
     (picked) => { pendingEntry.trainingWhy = picked; }
+  );
+});
   );
 });
 
