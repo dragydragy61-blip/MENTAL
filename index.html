@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Дневник</title>
 
-  <!-- Telegram WebApp API (не обязательно, но пригодится дальше) -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
   <style>
@@ -84,64 +83,67 @@
       background: #eee;
       margin: 10px 0;
     }
-   #followup, #followupOptions {
-  position: relative;
-  z-index: 9999;
-  pointer-events: auto;
-}
 
-.optionBtn {
-  pointer-events: auto;
-  position: relative;
-  z-index: 10000;
-}
-
-.optionBtn.active {
-  border: 2px solid #2f80ed;
-  font-weight: 700;
-}
-  #trainYes.active,
-#trainNo.active {
-  border: 2px solid #2f80ed;
-  font-weight: 700;
-}
+    /* кликабельность в WebView + подсветка вариантов */
+    #followup, #followupOptions {
+      position: relative;
+      z-index: 9999;
+      pointer-events: auto;
+    }
+    .optionBtn {
+      pointer-events: auto;
+      position: relative;
+      z-index: 10000;
+    }
+    .optionBtn.active {
+      border: 2px solid #2f80ed;
+      font-weight: 700;
+    }
+    #trainYes.active,
+    #trainNo.active {
+      border: 2px solid #2f80ed;
+      font-weight: 700;
+    }
   </style>
 </head>
 
 <body>
+  <!-- Шаг 1 -->
   <div class="card" id="step1">
     <h1>Как ты себя сегодня чувствуешь?</h1>
 
     <textarea id="answer" placeholder="Напиши пару слов..."></textarea>
 
     <div class="row">
-      <button class="primary" id="saveBtn">Сохранить</button>
-      <button id="clearBtn">Очистить всё</button>
+      <button class="primary" id="saveBtn" type="button">Сохранить</button>
+      <button id="clearBtn" type="button">Очистить всё</button>
     </div>
 
     <div class="status" id="status"></div>
     <div class="muted" id="lastSaved"></div>
   </div>
+
+  <!-- Шаг 2 -->
   <div class="card" id="step2" style="display:none;">
-  <h1>Была ли сегодня тренировка?</h1>
+    <h1>Была ли сегодня тренировка?</h1>
 
-  <div class="row">
-    <button id="trainYes">Да</button>
-    <button id="trainNo">Нет</button>
-  </div>
+    <div class="row">
+      <button id="trainYes" type="button">Да</button>
+      <button id="trainNo" type="button">Нет</button>
+    </div>
 
-  <div id="followup" style="display:none; margin-top: 12px;">
-    <div class="muted" id="followupTitle" style="margin-bottom: 8px;"></div>
+    <div id="followup" style="display:none; margin-top: 12px;">
+      <div class="muted" id="followupTitle" style="margin-bottom: 8px;"></div>
+      <div class="row" id="followupOptions"></div>
 
-    <div class="row" id="followupOptions"></div>
-
-    <div class="row" style="margin-top: 10px;">
-    <button class="primary" id="saveBtn">Сохранить</button>
-<button id="clearBtn">Очистить всё</button>
+      <div class="row" style="margin-top: 10px;">
+        <button class="primary" id="finishBtn" type="button">Сохранить запись</button>
+        <button id="backBtn" type="button">Назад</button>
+      </div>
     </div>
   </div>
-</div>
 
+  <!-- История -->
   <div class="card">
     <div class="muted">История (последние 20 записей)</div>
     <div class="divider"></div>
@@ -149,11 +151,12 @@
   </div>
 
   <script>
+    // ===== Состояние между шагами =====
     let pendingEntry = null;
+
     // ===== Настройки хранения =====
     const STORAGE_KEY = "mental_checkins_v1";
     const MAX_ITEMS = 20;
-    
 
     // ===== Утилиты =====
     function nowIso() {
@@ -162,7 +165,13 @@
 
     function formatDate(iso) {
       const d = new Date(iso);
-      return d.toLocaleString("ru-RU", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+      return d.toLocaleString("ru-RU", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
     }
 
     function loadItems() {
@@ -180,22 +189,25 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     }
 
-    // ===== Отрисовка =====
+    // ===== UI =====
+    function setStatus(msg) {
+      const el = document.getElementById("status");
+      el.textContent = msg;
+      setTimeout(() => { el.textContent = ""; }, 1800);
+    }
+
     function render() {
       const items = loadItems();
 
-      // Последняя запись
       const last = items[0];
       const lastSavedEl = document.getElementById("lastSaved");
-      if (last) {
-        lastSavedEl.textContent = `Последняя запись: ${formatDate(last.ts)}`;
-      } else {
-        lastSavedEl.textContent = "Пока нет сохранённых записей.";
-      }
+      lastSavedEl.textContent = last
+        ? `Последняя запись: ${formatDate(last.ts)}`
+        : "Пока нет сохранённых записей.";
 
-      // История
       const ul = document.getElementById("history");
       ul.innerHTML = "";
+
       items.slice(0, MAX_ITEMS).forEach((it) => {
         const li = document.createElement("li");
 
@@ -212,36 +224,31 @@
       });
     }
 
-    // ===== Действия пользователя =====
-    function setStatus(msg) {
-      document.getElementById("status").textContent = msg;
-      setTimeout(() => {
-        document.getElementById("status").textContent = "";
-      }, 1800);
-    }
-
+    // ===== Шаг 1 =====
     function onSave() {
-  const text = document.getElementById("answer").value.trim();
-  if (!text) {
-    setStatus("Напиши хотя бы пару слов 🙂");
-    return;
-  }
+      const text = document.getElementById("answer").value.trim();
+      if (!text) {
+        setStatus("Напиши хотя бы пару слов 🙂");
+        return;
+      }
 
-  // создаём черновик
-  pendingEntry = {
-    ts: nowIso(),
-    text,
-    training: null,
-    trainingEffect: null,
-    trainingWhy: null
-  };
+      pendingEntry = {
+        ts: nowIso(),
+        text,
+        training: null,
+        trainingEffect: null,
+        trainingWhy: null
+      };
 
-  // переключаем экраны
-  document.getElementById("step2").style.display = "block";
-  document.getElementById("followup").style.display = "none";
+      // сбрасываем подсветку Да/Нет на всякий случай
+      document.getElementById("trainYes").classList.remove("active");
+      document.getElementById("trainNo").classList.remove("active");
 
-  setStatus("Окей, ещё один вопрос 👇");
-}
+      document.getElementById("step2").style.display = "block";
+      document.getElementById("followup").style.display = "none";
+
+      setStatus("Окей, ещё один вопрос 👇");
+    }
 
     function onClear() {
       const ok = confirm("Точно удалить все записи? Это нельзя отменить.");
@@ -250,106 +257,108 @@
       setStatus("Очищено");
       render();
     }
+
+    // ===== Шаг 2 =====
     function showFollowup(title, options, onPick) {
-  const followup = document.getElementById("followup");
-  const titleEl = document.getElementById("followupTitle");
-  const optsEl = document.getElementById("followupOptions");
+      const followup = document.getElementById("followup");
+      const titleEl = document.getElementById("followupTitle");
+      const optsEl = document.getElementById("followupOptions");
 
-  titleEl.textContent = title;
-  optsEl.innerHTML = "";
+      titleEl.textContent = title;
+      optsEl.innerHTML = "";
 
-  options.forEach((label) => {
-    const b = document.createElement("button");
-    b.type = "button";              // важно: чтобы не было "submit" поведения
-    b.className = "optionBtn";
-    b.textContent = label;
+      options.forEach((label) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "optionBtn";
+        b.textContent = label;
 
-    b.onclick = () => {             // onclick часто стабильнее в WebView
-      // визуально отмечаем выбор (100% заметно)
-      optsEl.querySelectorAll(".optionBtn").forEach(x => x.classList.remove("active"));
-      b.classList.add("active");
+        b.onclick = () => {
+          optsEl.querySelectorAll(".optionBtn").forEach(x => x.classList.remove("active"));
+          b.classList.add("active");
 
-      onPick(label);
+          onPick(label);
 
-      // это должно происходить ТОЛЬКО после выбора варианта
-      titleEl.textContent = title + " ✅ Выбрано: " + label;
-      setStatus("Отлично, теперь жми «Сохранить запись» ✓");
-    };
+          titleEl.textContent = title + " ✅ Выбрано: " + label;
+          setStatus("Отлично, теперь жми «Сохранить запись» ✓");
+        };
 
-    optsEl.appendChild(b);
-  });
+        optsEl.appendChild(b);
+      });
 
-  followup.style.display = "block";
-}
+      followup.style.display = "block";
+    }
 
-document.getElementById("trainYes").addEventListener("click", () => {
-  if (!pendingEntry) return;
+    document.getElementById("trainYes").addEventListener("click", () => {
+      if (!pendingEntry) return;
 
-  pendingEntry.training = true;
+      pendingEntry.training = true;
 
-  document.getElementById("trainYes").classList.add("active");
-  document.getElementById("trainNo").classList.remove("active");
+      document.getElementById("trainYes").classList.add("active");
+      document.getElementById("trainNo").classList.remove("active");
 
-  showFollowup(
-    "После тренировки тебе стало…",
-    ["Лучше", "Так же", "Хуже"],
-    (picked) => { pendingEntry.trainingEffect = picked; }
-  );
-});
+      showFollowup(
+        "После тренировки тебе стало…",
+        ["Лучше", "Так же", "Хуже"],
+        (picked) => { pendingEntry.trainingEffect = picked; }
+      );
+    });
 
-document.getElementById("trainNo").addEventListener("click", () => {
-  if (!pendingEntry) return;
+    document.getElementById("trainNo").addEventListener("click", () => {
+      if (!pendingEntry) return;
 
-  pendingEntry.training = false;
+      pendingEntry.training = false;
 
-  document.getElementById("trainNo").classList.add("active");
-  document.getElementById("trainYes").classList.remove("active");
+      document.getElementById("trainNo").classList.add("active");
+      document.getElementById("trainYes").classList.remove("active");
 
-  showFollowup(
-    "Почему не получилось?",
-    ["Не было сил", "Не было времени", "Не было желания", "Болел/травма", "Другое"],
-    (picked) => { pendingEntry.trainingWhy = picked; }
-  );
-});
-  );
-});
+      showFollowup(
+        "Почему не получилось?",
+        ["Не было сил", "Не было времени", "Не было желания", "Болел/травма", "Другое"],
+        (picked) => { pendingEntry.trainingWhy = picked; }
+      );
+    });
 
-document.getElementById("backBtn").addEventListener("click", () => {
-  document.getElementById("step2").style.display = "none";
-  document.getElementById("followup").style.display = "none";
-});
+    document.getElementById("backBtn").addEventListener("click", () => {
+      document.getElementById("step2").style.display = "none";
+      document.getElementById("followup").style.display = "none";
+    });
 
-document.getElementById("finishBtn").addEventListener("click", () => {
-  if (!pendingEntry) return;
+    document.getElementById("finishBtn").addEventListener("click", () => {
+      if (!pendingEntry) return;
 
-  // проверка: выбрали ли уточнение
-  if (pendingEntry.training === true && !pendingEntry.trainingEffect) {
-    setStatus("Выбери: лучше/так же/хуже 🙂");
-    return;
-  }
-  if (pendingEntry.training === false && !pendingEntry.trainingWhy) {
-    setStatus("Выбери причину 🙂");
-    return;
-  }
+      if (pendingEntry.training === true && !pendingEntry.trainingEffect) {
+        setStatus("Выбери: лучше/так же/хуже 🙂");
+        return;
+      }
+      if (pendingEntry.training === false && !pendingEntry.trainingWhy) {
+        setStatus("Выбери причину 🙂");
+        return;
+      }
 
-  const items = loadItems();
-  items.unshift(pendingEntry);
-  saveItems(items);
+      const items = loadItems();
+      items.unshift(pendingEntry);
+      saveItems(items);
 
-  pendingEntry = null;
+      pendingEntry = null;
 
-  document.getElementById("answer").value = "";
-  document.getElementById("step2").style.display = "none";
-  document.getElementById("followup").style.display = "none";
+      document.getElementById("answer").value = "";
+      document.getElementById("step2").style.display = "none";
+      document.getElementById("followup").style.display = "none";
 
-  setStatus("Сохранено ✓");
-  render();
-});
+      try {
+        const tg = window.Telegram?.WebApp;
+        tg?.HapticFeedback?.notificationOccurred?.("success");
+        tg?.ready?.();
+      } catch {}
+
+      setStatus("Сохранено ✓");
+      render();
+    });
 
     // ===== Инициализация =====
     document.getElementById("saveBtn").addEventListener("click", onSave);
     document.getElementById("clearBtn").addEventListener("click", onClear);
-
     render();
   </script>
 </body>
