@@ -1,51 +1,220 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <title>Чек-ин</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Дневник</title>
+
+  <!-- Telegram WebApp API (не обязательно, но пригодится дальше) -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
   <style>
     body {
-      font-family: sans-serif;
-      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      margin: 0;
+      padding: 18px;
       background: #f4f4f4;
+      color: #111;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e6e6e6;
+      border-radius: 12px;
+      padding: 16px;
+      max-width: 700px;
+      margin: 0 auto 12px auto;
     }
     h1 {
       font-size: 20px;
+      margin: 0 0 12px 0;
     }
     textarea {
       width: 100%;
-      height: 80px;
-      margin-bottom: 16px;
+      min-height: 90px;
+      resize: vertical;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid #d8d8d8;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+      flex-wrap: wrap;
     }
     button {
-      width: 100%;
-      padding: 12px;
-      font-size: 16px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid #d8d8d8;
+      background: #fff;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button.primary {
+      border-color: #cfcfcf;
+      font-weight: 600;
+    }
+    .status {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #2d7a2d;
+      min-height: 18px;
+    }
+    .muted {
+      color: #666;
+      font-size: 13px;
+    }
+    ul {
+      padding-left: 18px;
+      margin: 8px 0 0 0;
+    }
+    li {
+      margin: 6px 0;
+      line-height: 1.35;
+    }
+    .date {
+      color: #777;
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+    .divider {
+      height: 1px;
+      background: #eee;
+      margin: 10px 0;
     }
   </style>
 </head>
+
 <body>
+  <div class="card">
+    <h1>Как ты себя сегодня чувствуешь?</h1>
 
-<h1>Как ты себя сегодня чувствуешь?</h1>
+    <textarea id="answer" placeholder="Напиши пару слов..."></textarea>
 
-<textarea id="answer" placeholder="Напиши пару слов..."></textarea>
+    <div class="row">
+      <button class="primary" id="saveBtn">Сохранить</button>
+      <button id="clearBtn">Очистить всё</button>
+    </div>
 
-<button onclick="save()">Сохранить</button>
+    <div class="status" id="status"></div>
+    <div class="muted" id="lastSaved"></div>
+  </div>
 
-<p id="status"></p>
+  <div class="card">
+    <div class="muted">История (последние 20 записей)</div>
+    <div class="divider"></div>
+    <ul id="history"></ul>
+  </div>
 
-<script>
-  const tg = window.Telegram.WebApp;
+  <script>
+    // ===== Настройки хранения =====
+    const STORAGE_KEY = "mental_checkins_v1";
+    const MAX_ITEMS = 20;
 
-  function save() {
-    const value = document.getElementById('answer').value;
-    localStorage.setItem('today_checkin', value);
-    document.getElementById('status').innerText = 'Сохранено ✔';
-    tg.HapticFeedback.notificationOccurred('success');
-  }
-</script>
+    // ===== Утилиты =====
+    function nowIso() {
+      return new Date().toISOString();
+    }
 
+    function formatDate(iso) {
+      const d = new Date(iso);
+      return d.toLocaleString("ru-RU", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    }
+
+    function loadItems() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return [];
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveItems(items) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    }
+
+    // ===== Отрисовка =====
+    function render() {
+      const items = loadItems();
+
+      // Последняя запись
+      const last = items[0];
+      const lastSavedEl = document.getElementById("lastSaved");
+      if (last) {
+        lastSavedEl.textContent = `Последняя запись: ${formatDate(last.ts)}`;
+      } else {
+        lastSavedEl.textContent = "Пока нет сохранённых записей.";
+      }
+
+      // История
+      const ul = document.getElementById("history");
+      ul.innerHTML = "";
+      items.slice(0, MAX_ITEMS).forEach((it) => {
+        const li = document.createElement("li");
+
+        const date = document.createElement("div");
+        date.className = "date";
+        date.textContent = formatDate(it.ts);
+
+        const text = document.createElement("div");
+        text.textContent = it.text;
+
+        li.appendChild(date);
+        li.appendChild(text);
+        ul.appendChild(li);
+      });
+    }
+
+    // ===== Действия пользователя =====
+    function setStatus(msg) {
+      document.getElementById("status").textContent = msg;
+      setTimeout(() => {
+        document.getElementById("status").textContent = "";
+      }, 1800);
+    }
+
+    function onSave() {
+      const text = document.getElementById("answer").value.trim();
+      if (!text) {
+        setStatus("Напиши хотя бы пару слов 🙂");
+        return;
+      }
+
+      const items = loadItems();
+      items.unshift({ ts: nowIso(), text }); // добавляем в начало (самое новое сверху)
+      saveItems(items);
+
+      setStatus("Сохранено ✓");
+      document.getElementById("answer").value = "";
+
+      // Лёгкая вибрация, если открыто в Telegram (не сломает браузер)
+      try {
+        const tg = window.Telegram?.WebApp;
+        tg?.HapticFeedback?.notificationOccurred?.("success");
+        tg?.ready?.();
+      } catch {}
+
+      render();
+    }
+
+    function onClear() {
+      const ok = confirm("Точно удалить все записи? Это нельзя отменить.");
+      if (!ok) return;
+      localStorage.removeItem(STORAGE_KEY);
+      setStatus("Очищено");
+      render();
+    }
+
+    // ===== Инициализация =====
+    document.getElementById("saveBtn").addEventListener("click", onSave);
+    document.getElementById("clearBtn").addEventListener("click", onClear);
+
+    render();
+  </script>
 </body>
 </html>
