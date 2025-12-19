@@ -84,6 +84,17 @@
       background: #eee;
       margin: 10px 0;
     }
+    #followup, #followupOptions {
+  position: relative;
+  z-index: 5;
+  pointer-events: auto;
+}
+
+.optionBtn {
+  pointer-events: auto;
+  position: relative;
+  z-index: 6;
+}
   </style>
 </head>
 
@@ -240,7 +251,9 @@
   options.forEach((label) => {
     const b = document.createElement("button");
     b.textContent = label;
+    b.className = "optionBtn";
     b.addEventListener("click", () => onPick(label));
+    setStatus("Отлично, можешь сохранить запись ✓");
     optsEl.appendChild(b);
   });
 
