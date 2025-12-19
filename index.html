@@ -84,16 +84,21 @@
       background: #eee;
       margin: 10px 0;
     }
-    #followup, #followupOptions {
+   #followup, #followupOptions {
   position: relative;
-  z-index: 5;
+  z-index: 9999;
   pointer-events: auto;
 }
 
 .optionBtn {
   pointer-events: auto;
   position: relative;
-  z-index: 6;
+  z-index: 10000;
+}
+
+.optionBtn.active {
+  border: 2px solid #2f80ed;
+  font-weight: 700;
 }
   </style>
 </head>
@@ -250,10 +255,22 @@
 
   options.forEach((label) => {
     const b = document.createElement("button");
-    b.textContent = label;
+    b.type = "button";              // важно: чтобы не было "submit" поведения
     b.className = "optionBtn";
-    b.addEventListener("click", () => onPick(label));
-    setStatus("Отлично, можешь сохранить запись ✓");
+    b.textContent = label;
+
+    b.onclick = () => {             // onclick часто стабильнее в WebView
+      // визуально отмечаем выбор (100% заметно)
+      optsEl.querySelectorAll(".optionBtn").forEach(x => x.classList.remove("active"));
+      b.classList.add("active");
+
+      onPick(label);
+
+      // это должно происходить ТОЛЬКО после выбора варианта
+      titleEl.textContent = title + " ✅ Выбрано: " + label;
+      setStatus("Отлично, теперь жми «Сохранить запись» ✓");
+    };
+
     optsEl.appendChild(b);
   });
 
@@ -262,8 +279,8 @@
 
 document.getElementById("trainYes").addEventListener("click", () => {
   if (!pendingEntry) return;
-
   pendingEntry.training = true;
+
   showFollowup(
     "После тренировки тебе стало…",
     ["Лучше", "Так же", "Хуже"],
@@ -273,8 +290,8 @@ document.getElementById("trainYes").addEventListener("click", () => {
 
 document.getElementById("trainNo").addEventListener("click", () => {
   if (!pendingEntry) return;
-
   pendingEntry.training = false;
+
   showFollowup(
     "Почему не получилось?",
     ["Не было сил", "Не было времени", "Не было желания", "Болел/травма", "Другое"],
