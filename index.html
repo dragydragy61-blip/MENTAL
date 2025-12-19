@@ -88,7 +88,7 @@
 </head>
 
 <body>
-  <div class="card">
+  <div class="card" id="step1">
     <h1>Как ты себя сегодня чувствуешь?</h1>
 
     <textarea id="answer" placeholder="Напиши пару слов..."></textarea>
@@ -101,6 +101,25 @@
     <div class="status" id="status"></div>
     <div class="muted" id="lastSaved"></div>
   </div>
+  <div class="card" id="step2" style="display:none;">
+  <h1>Была ли сегодня тренировка?</h1>
+
+  <div class="row">
+    <button class="primary" id="trainYes">Да</button>
+    <button id="trainNo">Нет</button>
+  </div>
+
+  <div id="followup" style="display:none; margin-top: 12px;">
+    <div class="muted" id="followupTitle" style="margin-bottom: 8px;"></div>
+
+    <div class="row" id="followupOptions"></div>
+
+    <div class="row" style="margin-top: 10px;">
+      <button class="primary" id="finishBtn">Сохранить запись</button>
+      <button id="backBtn">Назад</button>
+    </div>
+  </div>
+</div>
 
   <div class="card">
     <div class="muted">История (последние 20 записей)</div>
@@ -109,9 +128,11 @@
   </div>
 
   <script>
+    let pendingEntry = null;
     // ===== Настройки хранения =====
     const STORAGE_KEY = "mental_checkins_v1";
     const MAX_ITEMS = 20;
+    
 
     // ===== Утилиты =====
     function nowIso() {
@@ -179,28 +200,27 @@
     }
 
     function onSave() {
-      const text = document.getElementById("answer").value.trim();
-      if (!text) {
-        setStatus("Напиши хотя бы пару слов 🙂");
-        return;
-      }
+  const text = document.getElementById("answer").value.trim();
+  if (!text) {
+    setStatus("Напиши хотя бы пару слов 🙂");
+    return;
+  }
 
-      const items = loadItems();
-      items.unshift({ ts: nowIso(), text }); // добавляем в начало (самое новое сверху)
-      saveItems(items);
+  // создаём черновик
+  pendingEntry = {
+    ts: nowIso(),
+    text,
+    training: null,
+    trainingEffect: null,
+    trainingWhy: null
+  };
 
-      setStatus("Сохранено ✓");
-      document.getElementById("answer").value = "";
+  // переключаем экраны
+  document.getElementById("step2").style.display = "block";
+  document.getElementById("followup").style.display = "none";
 
-      // Лёгкая вибрация, если открыто в Telegram (не сломает браузер)
-      try {
-        const tg = window.Telegram?.WebApp;
-        tg?.HapticFeedback?.notificationOccurred?.("success");
-        tg?.ready?.();
-      } catch {}
-
-      render();
-    }
+  setStatus("Окей, ещё один вопрос 👇");
+}
 
     function onClear() {
       const ok = confirm("Точно удалить все записи? Это нельзя отменить.");
@@ -209,6 +229,77 @@
       setStatus("Очищено");
       render();
     }
+    function showFollowup(title, options, onPick) {
+  const followup = document.getElementById("followup");
+  const titleEl = document.getElementById("followupTitle");
+  const optsEl = document.getElementById("followupOptions");
+
+  titleEl.textContent = title;
+  optsEl.innerHTML = "";
+
+  options.forEach((label) => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.addEventListener("click", () => onPick(label));
+    optsEl.appendChild(b);
+  });
+
+  followup.style.display = "block";
+}
+
+document.getElementById("trainYes").addEventListener("click", () => {
+  if (!pendingEntry) return;
+
+  pendingEntry.training = true;
+  showFollowup(
+    "После тренировки тебе стало…",
+    ["Лучше", "Так же", "Хуже"],
+    (picked) => { pendingEntry.trainingEffect = picked; }
+  );
+});
+
+document.getElementById("trainNo").addEventListener("click", () => {
+  if (!pendingEntry) return;
+
+  pendingEntry.training = false;
+  showFollowup(
+    "Почему не получилось?",
+    ["Не было сил", "Не было времени", "Не было желания", "Болел/травма", "Другое"],
+    (picked) => { pendingEntry.trainingWhy = picked; }
+  );
+});
+
+document.getElementById("backBtn").addEventListener("click", () => {
+  document.getElementById("step2").style.display = "none";
+  document.getElementById("followup").style.display = "none";
+});
+
+document.getElementById("finishBtn").addEventListener("click", () => {
+  if (!pendingEntry) return;
+
+  // проверка: выбрали ли уточнение
+  if (pendingEntry.training === true && !pendingEntry.trainingEffect) {
+    setStatus("Выбери: лучше/так же/хуже 🙂");
+    return;
+  }
+  if (pendingEntry.training === false && !pendingEntry.trainingWhy) {
+    setStatus("Выбери причину 🙂");
+    return;
+  }
+
+  const items = loadItems();
+  items.unshift(pendingEntry);
+  saveItems(items);
+
+  pendingEntry = null;
+
+  document.getElementById("answer").value = "";
+  document.getElementById("step2").style.display = "none";
+  document.getElementById("followup").style.display = "none";
+
+  setStatus("Сохранено ✓");
+  render();
+});
 
     // ===== Инициализация =====
     document.getElementById("saveBtn").addEventListener("click", onSave);
